@@ -378,19 +378,6 @@ skip_video:
     cmp AL, 1
     jne skip_print_bitboards
     call printBitboards
-    call determineColour, 0, 0
-    call printUnsignedNumber, [colour_to_draw]
-    call printNewline
-    call determineColour, 1, 0
-    call printUnsignedNumber, [colour_to_draw]
-    call printNewline
-    call determineColour, 10, 0
-    call printUnsignedNumber, [colour_to_draw]
-    call printNewline
-    call determineColour, 10, 100
-    call printUnsignedNumber, [colour_to_draw]
-    call printNewline
-
 skip_print_bitboards:
 
     mov AL, DEBUG
@@ -401,8 +388,6 @@ skip_draw_board:
     
 
 
-
-    
 wait_for_key:
     ; Wait for keystroke
     mov ah, 0h
