@@ -254,43 +254,48 @@ call printUnsignedNumber, [white_pawns_high]
 ENDP printBitboards
 
 PROC determineColour
+    USES eax, ebx, ecx, edx
     ARG @@xcoor:dword, @@ycoor:dword
     LOCAL @@tilex:dword, @@tiley:dword
 
     ; load x coordinate
     mov eax, [dword ptr @@xcoor]
+    cmp eax, PADDING
+    jl @@black
+
+    mov eax, [dword ptr @@xcoor]
+    cmp eax, 260
+    jge @@black
 
     ; subtract padding
     mov ecx, PADDING
-    ;sub eax, ecx
-
+    sub eax, ecx
 
     ; divide by 25 to get the tile number
-    mov edx, TILESIZE
-    div edx
-    ;mov [@@tilex], ax
+    mov ebx, TILESIZE
+    xor edx, edx
+    div ebx
+    mov [@@tilex], eax
 
     ; load y coordinate
-    ;mov ax, [word ptr @@ycoor]
-    ;mov dx, TILESIZE
-    ;div dx
-    ;mov [@@tiley], ax
+    mov eax, [dword ptr @@ycoor]
+    xor edx, edx
+    div ebx
+    mov [@@tiley], eax
+
+    ; check if the tile is black brown or white
+    mov eax, [@@tilex]
+    mov ebx, [@@tiley]
+    add eax, ebx
+    and eax, 1
+
 ;
-    ;; check if the tile is black brown or white
-    ;mov ax, [@@tilex]
-    ;mov bx, [@@tiley]
-    ;add ax, bx
-    ;and ax, 1
-    ;;check if ax is negative
-    ;js @@black
-;
-    ;;check if even
-    ;jnz @@white    ; Jump if not zero (odd number)
-    ;jmp @@brown
+    ;check if even
+    jnz @@brown    ; Jump if not zero (odd number)
+    jmp @@white
 
 @@black:
     mov [colour_to_draw], 0
-
     ret
 
 @@white:
@@ -305,9 +310,35 @@ ENDP determineColour
 
 
 PROC drawEmptyBoard
-    call determineColour, 100, 0
-    ret
+    uses ecx, edx, edi
+    mov ecx, 0             ; Start with y = 0
+outer_loop:
+    cmp ecx, 200           ; Stop after reaching y = 200 (height of the screen)
+    jge end_outer_loop     ; If y >= 200, exit the loop
+    
+    ; Inner loop: x-coordinate (columns)
+    mov edx, 0             ; Start with x = 0
+inner_loop:
+    cmp edx, 320           ; Stop after reaching x = 320 (width of the screen)
+    jge end_inner_loop     ; If x >= 320, exit the loop
+
+    ; Call determineColour for current (x, y)
+    call determineColour, edx, ecx    ; Call the function with (x, y)
+    mov eax, [colour_to_draw] ; Load the colour to draw
+    mov [edi], al          ; Store the colour in the video memory
+    inc edi                 ; Move to the next pixel
+
+    inc edx                 ; Increment x-coordinate (move to next pixel in row)
+    jmp inner_loop          ; Repeat for the next column
+
+end_inner_loop:
+    inc ecx                 ; Increment y-coordinate (move to next row)
+    jmp outer_loop          ; Repeat for the next row
+
+end_outer_loop:
+    ret                     ; Return from the function
 ENDP drawEmptyBoard
+
 
 
 
@@ -325,7 +356,7 @@ PROC main
     PADDING EQU 60         ; black pixels left and right since 320x200 is not 1:1
     BOARDDIMENSION EQU 200 
     TILESIZE EQU 25 
-    DEBUG EQU 1
+    DEBUG EQU 0
 
     EXTRN printUnsignedNumber:PROC
     EXTRN printNewline:PROC
@@ -347,10 +378,26 @@ skip_video:
     cmp AL, 1
     jne skip_print_bitboards
     call printBitboards
-
-    call determineColour, 100, 0
+    call determineColour, 0, 0
     call printUnsignedNumber, [colour_to_draw]
+    call printNewline
+    call determineColour, 1, 0
+    call printUnsignedNumber, [colour_to_draw]
+    call printNewline
+    call determineColour, 10, 0
+    call printUnsignedNumber, [colour_to_draw]
+    call printNewline
+    call determineColour, 10, 100
+    call printUnsignedNumber, [colour_to_draw]
+    call printNewline
+
 skip_print_bitboards:
+
+    mov AL, DEBUG
+    cmp AL, 1
+    je skip_draw_board
+    call drawEmptyBoard
+skip_draw_board:
     
 
 

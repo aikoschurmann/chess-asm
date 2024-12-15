@@ -61,8 +61,10 @@ skip_video:
 - [X] Set up **starting positions** for all pieces on the board.
 - [X] Implement a function to **print** the bitboard for debugging.
 
-- [ ] Start using video buffer to **display board**
+- [X] Start using video buffer to **display board**
 just draw an 8*8 grid. make background colour brown, then only draw the white squares for example. (more efficient) make a PROC for this
+
+- [ ] complex so do later... After the initial render of the board. store that array and then copy that insetead of recalculating. (way faster)
 
 - [ ] **Display pieces** using bitboards 
 drawPieces(bitboard, type)
