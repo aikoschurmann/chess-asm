@@ -253,6 +253,66 @@ call printUnsignedNumber, [white_pawns_high]
 
 ENDP printBitboards
 
+PROC determineColour
+    ARG @@xcoor:dword, @@ycoor:dword
+    LOCAL @@tilex:dword, @@tiley:dword
+
+    ; load x coordinate
+    mov eax, [dword ptr @@xcoor]
+
+    ; subtract padding
+    mov ecx, PADDING
+    ;sub eax, ecx
+
+
+    ; divide by 25 to get the tile number
+    mov edx, TILESIZE
+    div edx
+    ;mov [@@tilex], ax
+
+    ; load y coordinate
+    ;mov ax, [word ptr @@ycoor]
+    ;mov dx, TILESIZE
+    ;div dx
+    ;mov [@@tiley], ax
+;
+    ;; check if the tile is black brown or white
+    ;mov ax, [@@tilex]
+    ;mov bx, [@@tiley]
+    ;add ax, bx
+    ;and ax, 1
+    ;;check if ax is negative
+    ;js @@black
+;
+    ;;check if even
+    ;jnz @@white    ; Jump if not zero (odd number)
+    ;jmp @@brown
+
+@@black:
+    mov [colour_to_draw], 0
+
+    ret
+
+@@white:
+    mov [colour_to_draw], 15
+    ret
+
+@@brown:
+    mov [colour_to_draw], 6
+    ret
+
+ENDP determineColour
+
+
+PROC drawEmptyBoard
+    call determineColour, 100, 0
+    ret
+ENDP drawEmptyBoard
+
+
+
+
+
 
 PROC main
     sti                ; Enable interrupts.
@@ -261,6 +321,10 @@ PROC main
     VMEMADR EQU 0A0000h    ; Video memory address
     SCRWIDTH EQU 320       ; Screen width for mode 13h
     SCRHEIGHT EQU 200      ; Screen height
+
+    PADDING EQU 60         ; black pixels left and right since 320x200 is not 1:1
+    BOARDDIMENSION EQU 200 
+    TILESIZE EQU 25 
     DEBUG EQU 1
 
     EXTRN printUnsignedNumber:PROC
@@ -283,6 +347,9 @@ skip_video:
     cmp AL, 1
     jne skip_print_bitboards
     call printBitboards
+
+    call determineColour, 100, 0
+    call printUnsignedNumber, [colour_to_draw]
 skip_print_bitboards:
     
 
@@ -333,6 +400,7 @@ white_kings_high DD 0 ; High 32 bits
 white_kings_low  DD 0 ; Low 32 bits
 black_kings_high DD 0 ; High 32 bits
 black_kings_low  DD 0 ; Low 32 bits
+colour_to_draw DD 0
 
 
     
