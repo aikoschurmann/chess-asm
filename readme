@@ -1,0 +1,112 @@
+# Chess Bitboards in Assembly - Notes
+
+Hey, just wanted to share some thoughts on how we're using bitboards in the chess project. This is mainly for keeping track of the chess pieces on the board and making move generation super fast using bitwise operations. Here’s a quick breakdown:
+
+---
+
+## What are Bitboards?
+
+- A **bitboard** is essentially a 64-bit integer where each bit corresponds to a square on the chessboard (8x8 grid). Each bit represents whether a piece (like a pawn, knight, etc.) is on that square or not.
+- We have 64 squares, so a 64-bit integer (bitboard) fits perfectly for this.
+- since we only have 32 bits we use a low and high bitboard for each piece type for both colours
+---
+
+## How to Read the Board
+
+- **A1** is the least significant bit (bit 0) in a 64-bit number.
+- **H8** is the most significant bit (bit 63).
+  
+For example:
+- If a white pawn is on **A2**, then bit 8 (counting from 0) is set to 1.
+  
+---
+
+## Example of Bitboards
+
+For **white pawns on rank 2** (A2 to H2), the bitboard would look like this:
+low 
+00000000 00000000 00000000 00000000
+
+high
+00000000 00000000 11111111 00000000
+
+
+moving forward would be a bitshift left of 8 but needs to take into account overflow since only 32 bit instead of 64
+low 
+00000000 00000000 00000000 00000000
+
+high
+00000000 11111111 00000000 00000000
+
+etc etc
+
+## notes I make use of a DEBUG macro
+if on we dont enter video mode but instead print information
+else we dont print info but instead enter video mode like so
+
+
+    ; Set video mode 13h
+    mov AL, DEBUG
+    cmp AL, 1
+
+    je skip_video
+    mov AX, 13h
+    int 10h
+skip_video:
+
+
+## TODO
+
+- [X] Implement the bitboards for **all pieces** (pawns, knights, bishops, etc.)
+- [X] Set up **starting positions** for all pieces on the board.
+- [X] Implement a function to **print** the bitboard for debugging.
+
+- [ ] Start using video buffer to **display board**
+just draw an 8*8 grid. make background colour brown, then only draw the white squares for example. (more efficient) make a PROC for this
+
+- [ ] **Display pieces** using bitboards 
+drawPieces(bitboard, type)
+where type is a number
+for example 0 = pawn, 1 = Knight etc etc
+we will also need the function to read images and alter palette from I think the dancer example. 
+
+- [ ] Make a function to **combine bitboards same colour** using bitwise and (for checking blocking pieces)
+combineBlackBitboards()
+
+stores it in datasegment for example:
+blackCombineLow 
+blackCombineHigh 
+
+- [ ] Implement Moving functions
+position is the piece for which you want to compute the moves
+movement_bitboard = generate_moves(piece, position, blockers)
+
+piece = rook
+position = 63 (bottom right)
+blockers:
+
+00000000
+00000000
+00000001
+00000000
+00000000
+00000000
+00000000
+00000000
+
+movement_bitboard:
+
+00000000
+00000000
+00000000
+00000001
+00000001
+00000001
+00000001
+11111111
+
+etc etc for other pieces
+
+- [ ] implement game loop turns
+
+- [ ] implement selection and movement of pieces in ui
