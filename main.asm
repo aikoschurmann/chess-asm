@@ -316,7 +316,8 @@ PROC drawEmptyBoard
     uses ecx, edx, edi, eax
     mov ecx, 0             ; Start with y = 0
     ;mov edi to start of video_buffer
-    mov edi, VMEMADR
+    mov edi, offset _screenBuffer
+    sub edi, 0
 
 outer_loop:
     cmp ecx, 200           ; Stop after reaching y = 200 (height of the screen)
@@ -358,18 +359,41 @@ ENDP drawEmptyBoard
 PROC copyBufferToVideoMemory
     USES esi, edi, ecx
     cld
-    mov esi, offset _screenBuffer ; points to a "db 64000 dup ( ? ) " array
+    Lea esi, [offset _screenBuffer] ; points to a "db 64000 dup ( ? ) " array
     mov edi, VMEMADR ; the video memory
     mov ecx, 64000 / 4 ; 320 * 200 , but copy groups four b y t e s
     rep movsd ; moves a dword and updates ecx , e s i and edi
     ret
 ENDP copyBufferToVideoMemory
 
+PROC copyBufferToVideoMemoryLoop
+    ; Set up segment registers
+    mov esi, OFFSET _screenBuffer ; Source pointer
+    mov edi, VMEMADR             ; Destination pointer
+    mov ecx, 64000               ; Number of bytes to copy
+
+@@loop:
+    cmp ecx, 0                   ; Check if counter is zero
+    je @@copyBufferToVideoMemoryLoopEnd
+    mov al, [esi]                ; Load a byte from source into AL
+    mov [edi], al                ; Store the byte in destination
+    inc esi                      ; Increment source pointer
+    inc edi                      ; Increment destination pointer
+    dec ecx                      ; Decrement counter
+    jmp @@loop
+
+@@copyBufferToVideoMemoryLoopEnd:
+    ret                          ; Return from procedure
+ENDP copyBufferToVideoMemoryLoop
+
+
+
 PROC main
     sti                ; Enable interrupts.
     cld                ; Clear direction flag.
 
     VMEMADR EQU 0A0000h    ; Video memory address
+    BUFFERADR EQU 0B0000h  ; Buffer address
     SCRWIDTH EQU 320       ; Screen width for mode 13h
     SCRHEIGHT EQU 200      ; Screen height
 
@@ -405,13 +429,9 @@ skip_print_bitboards:
     mov AL, DEBUG
     cmp AL, 1
     je skip_draw_board
-    ;call drawEmptyBoard 
-
-    
-    mov eax, 1
-    mov edi, offset _screenBuffer
-    mov [edi], al
-    call copyBufferToVideoMemory  
+    call drawEmptyBoard 
+    ;call copyBackgroundToBuffer
+    call copyBufferToVideoMemoryLoop  
 
 
 skip_draw_board:
