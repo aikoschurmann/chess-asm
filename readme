@@ -64,9 +64,9 @@ skip_video:
 - [X] Start using video buffer to **display board**
 just draw an 8*8 grid. make background colour brown, then only draw the white squares for example. (more efficient) make a PROC for this
 
-- [ ] complex so do later... After the initial render of the board. store that array and then copy that insetead of recalculating. (way faster)
+- [X] complex so do later... After the initial render of the board. store that array and then copy that insetead of recalculating. (way faster)
 
-- [ ] **Display pieces** using bitboards 
+- [X] **Display pieces** using bitboards 
 drawPieces(bitboard, type)
 where type is a number
 for example 0 = pawn, 1 = Knight etc etc

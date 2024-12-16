@@ -1,13 +1,4 @@
 def scale_sprite(sprite, width, height, scale_factor=2):
-    """
-    Scales a sprite by the given scale factor.
-    
-    :param sprite: List of rows representing the sprite (2D array as a flat list)
-    :param width: Original width of the sprite
-    :param height: Original height of the sprite
-    :param scale_factor: Factor by which to scale the sprite
-    :return: Scaled sprite as a list of rows
-    """
     scaled_sprite = []
     for row in range(height):
         original_row = sprite[row * width:(row + 1) * width]
@@ -22,12 +13,6 @@ def scale_sprite(sprite, width, height, scale_factor=2):
 
 
 def print_scaled_sprite(scaled_sprite, new_width):
-    """
-    Prints the scaled sprite in assembly format.
-
-    :param scaled_sprite: List representing the scaled sprite (2D array as flat list)
-    :param new_width: New width of the sprite
-    """
     print(f"_rook_black   dw {new_width}, {len(scaled_sprite) // new_width}")
     for i in range(0, len(scaled_sprite), new_width):
         row = scaled_sprite[i:i + new_width]

@@ -177,7 +177,7 @@ PROC setupBitboards
 ENDP setupBitboards
 
 PROC printBitboards
-call printUnsignedNumber, [white_pawns_high]
+    call printUnsignedNumber, [white_pawns_high]
     call printNewline
 
     call printUnsignedNumber, [white_pawns_low]
@@ -401,13 +401,25 @@ PROC drawSprite
 
     ; Calculate destination starting pointer (vertical positioning)
     mov edi, [@@dstPtr]       ; Base address of destination buffer
-    mov eax, [@@y]            ; Load y-coordinate
-    inc eax                   ; Adjust for starting at tile row (y + 1)
+    
+    ;mov eax, [@@y]            ; Load y-coordinate
+    ;inc eax                   ; Adjust for starting at tile row (y + 1)
+    ;mov ebx, TILESIZE
+    ;mul ebx                   ; eax = (y + 1) * TILESIZE
+    ;sub eax, [@@h]            ; Adjust for sprite height
+    ;mov ebx, SCRWIDTH         ; Screen width
+    ;mul ebx                   ; eax = ((y + 1) * TILESIZE - sprite height) * SCRWIDTH
+
+    mov eax, 7
+    sub eax, [@@y]
     mov ebx, TILESIZE
-    mul ebx                   ; eax = (y + 1) * TILESIZE
-    sub eax, [@@h]            ; Adjust for sprite height
-    mov ebx, SCRWIDTH         ; Screen width
-    mul ebx                   ; eax = ((y + 1) * TILESIZE - sprite height) * SCRWIDTH
+    mul ebx
+    mov ebx, TILESIZE
+    sub ebx, [@@h]
+    add eax, ebx
+    mov ebx, SCRWIDTH
+    mul ebx                 ; eax = ((7 - y) * TILESIZE) * SCRWIDTH
+
     add edi, eax              ; Add vertical offset to destination pointer
 
     ; Calculate horizontal starting pointer (x positioning)
@@ -449,10 +461,91 @@ PROC drawSprite
     ret                       ; Return from procedure
 ENDP drawSprite
 
+PROC drawBitBoard
+    ARG @@bitboard:dword,  @@spritePtr:dword, @@bitBoardOffset:dword
+
+    ; Load bitboard parts
+    ;EDX:EAX
+    mov ebx, [@@bitboard]    ; Low 32 bits
+    xor ecx, ecx                ; bit index (counter), starting from 0
+    xor edx, edx
+
+@@check_bit:
+    ; Test bit in eax (low part) or ebx (high part)
+    push ebx
+    test ebx, 1
+    pop ebx
+    jz @@skip_low
+    ; Calculate file (ecx % 8) and rank (ecx // 8)
+    mov eax, ecx
+    add eax, [@@bitBoardOffset]
+    mov esi, 8
+    ;quotient eax = 0
+    ;remainder edx = 0
+    div esi
+   
+    call drawSprite, @@spritePtr, offset _screenBuffer, edx, eax
+    
+    ;jmp @@done
+
+@@skip_low:
+    shr ebx, 1                  ; shift bitboard right
+    inc ecx                     ; increment bit index
+    cmp ecx, 32
+    jl @@check_bit                ; continue if in the low part
+
+@@done:
+    ret
+ENDP drawBitBoard
+
+PROC drawPieces
+    call drawBitBoard, [white_pawns_low], offset _pawn_white, 0
+    call drawBitBoard, [white_pawns_high], offset _pawn_black, 32
+
+    call drawBitBoard, [black_pawns_low], offset _pawn_white, 0
+    call drawBitBoard, [black_pawns_high], offset _pawn_black, 32
+
+    call drawBitBoard, [white_knights_low], offset _knight_white, 0
+    call drawBitBoard, [white_knights_high], offset _knight_black, 32
+
+    call drawBitBoard, [black_knights_low], offset _knight_white, 0
+    call drawBitBoard, [black_knights_high], offset _knight_black, 32
+
+    call drawBitBoard, [white_bishops_low], offset _bishop_white, 0
+    call drawBitBoard, [white_bishops_high], offset _bishop_black, 32
+
+    call drawBitBoard, [black_bishops_low], offset _bishop_white, 0
+    call drawBitBoard, [black_bishops_high], offset _bishop_black, 32
+
+    call drawBitBoard, [white_rooks_low], offset _rook_white, 0
+    call drawBitBoard, [white_rooks_high], offset _rook_black, 32
+
+    call drawBitBoard, [black_rooks_low], offset _rook_white, 0
+    call drawBitBoard, [black_rooks_high], offset _rook_black, 32
+
+    call drawBitBoard, [white_queens_low], offset _queen_white, 0
+    call drawBitBoard, [white_queens_high], offset _queen_black, 32
+
+    call drawBitBoard, [black_queens_low], offset _queen_white, 0
+    call drawBitBoard, [black_queens_high], offset _queen_black, 32
+
+    call drawBitBoard, [white_kings_low], offset _king_white, 0
+    call drawBitBoard, [white_kings_high], offset _king_black, 32
+
+    call drawBitBoard, [black_kings_low], offset _king_white, 0
+    call drawBitBoard, [black_kings_high], offset _king_black, 32
+
+    ret
+ENDP drawPieces
+
+
 
 PROC main
     sti                ; Enable interrupts.
     cld                ; Clear direction flag.
+
+    push ds
+    pop es
 
     VMEMADR EQU 0A0000h    ; Video memory address
     BUFFERADR EQU 0B0000h  ; Buffer address
@@ -462,79 +555,22 @@ PROC main
     PADDING EQU 60         ; black pixels left and right since 320x200 is not 1:1
     BOARDDIMENSION EQU 200 
     TILESIZE EQU 25 
-    DEBUG EQU 0
-
+    
     EXTRN printUnsignedNumber:PROC
     EXTRN printNewline:PROC
     EXTRN updateColourPalette:PROC
     EXTRN setVideoMode:PROC
 
-    ; Setup graphics
-    mov AL, DEBUG
-    cmp AL, 1
-    je skip_video
+
     call setVideoMode, 13h
     call updateColourPalette, 5
-skip_video:
-
-    ; Set start of video memory
     mov EDI, VMEMADR
-    
+
     call setupBitboards
 
-    mov AL, DEBUG
-    cmp AL, 1
-    jne skip_print_bitboards
-    call printBitboards
-skip_print_bitboards:
-
-    mov AL, DEBUG
-    cmp AL, 1
-    je skip_draw_board
     call drawEmptyBoard 
-    call copyBufferToVideoMemoryLoop 
-
-    ;call copyBackgroundToBuffer
-    call drawSprite, offset _bishop_black, offset _screenBuffer, 0, 0
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _king_black, offset _screenBuffer, 1, 0
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _knight_black, offset _screenBuffer, 2, 0
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _pawn_black, offset _screenBuffer, 3, 0
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _queen_black, offset _screenBuffer, 4, 0
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _rook_black, offset _screenBuffer, 5, 0
-    call copyBufferToVideoMemoryLoop 
-
-
-    call drawSprite, offset _bishop_white, offset _screenBuffer, 0, 1
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _king_white, offset _screenBuffer, 1, 1
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _knight_white, offset _screenBuffer, 2, 1
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _pawn_white, offset _screenBuffer, 3, 1
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _queen_white, offset _screenBuffer, 4, 1
-    call copyBufferToVideoMemoryLoop 
-
-    call drawSprite, offset _rook_white, offset _screenBuffer, 7, 7
-    call copyBufferToVideoMemoryLoop 
-
-
-skip_draw_board:
-    
+    call drawPieces
+    call copyBufferToVideoMemory
 
 
 wait_for_key:
@@ -585,6 +621,7 @@ white_kings_low  DD 0 ; Low 32 bits
 black_kings_high DD 0 ; High 32 bits
 black_kings_low  DD 0 ; Low 32 bits
 colour_to_draw DD 0
+
 
 
 _bishop_black   dw 21, 24
