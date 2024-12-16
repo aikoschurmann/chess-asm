@@ -260,14 +260,18 @@ PROC determineColour
 
     ; load x coordinate
     mov eax, [dword ptr @@xcoor]
+    ; if x is less than padding, it is black
     cmp eax, PADDING
     jl @@black
 
+    ; if x is greater than padding + board dimension, it is black
     mov eax, [dword ptr @@xcoor]
-    cmp eax, 260
+    mov ecx, BOARDDIMENSION
+    add ecx, PADDING
+    cmp eax, ecx
     jge @@black
 
-    ; subtract padding
+    ; subtract padding from x
     mov ecx, PADDING
     sub eax, ecx
 
@@ -279,6 +283,8 @@ PROC determineColour
 
     ; load y coordinate
     mov eax, [dword ptr @@ycoor]
+
+    ; divide by 25 to get the tile number
     xor edx, edx
     div ebx
     mov [@@tiley], eax
@@ -288,30 +294,30 @@ PROC determineColour
     mov ebx, [@@tiley]
     add eax, ebx
     and eax, 1
-
-;
-    ;check if even
     jnz @@brown    ; Jump if not zero (odd number)
-    jmp @@white
+    jmp @@white    ; Jump if zero (even number)
 
 @@black:
     mov [colour_to_draw], 0
     ret
 
 @@white:
-    mov [colour_to_draw], 15
+    mov [colour_to_draw], 1
     ret
 
 @@brown:
-    mov [colour_to_draw], 6
+    mov [colour_to_draw], 2
     ret
 
 ENDP determineColour
 
 
 PROC drawEmptyBoard
-    uses ecx, edx, edi
+    uses ecx, edx, edi, eax
     mov ecx, 0             ; Start with y = 0
+    ;mov edi to start of video_buffer
+    mov edi, VMEMADR
+
 outer_loop:
     cmp ecx, 200           ; Stop after reaching y = 200 (height of the screen)
     jge end_outer_loop     ; If y >= 200, exit the loop
@@ -339,11 +345,25 @@ end_outer_loop:
     ret                     ; Return from the function
 ENDP drawEmptyBoard
 
+;PROC copyBackgroundToBuffer
+;    USES esi, edi, ecx, eax
+;    cld
+;    mov esi , offset background_buffer ; points to a "db 64000 dup ( ? ) " array
+;    mov edi , VMEMADR ; the video memory
+;    mov ecx , 64000 / 4 ; 320 * 200 , but copy groups four b y t e s
+;    rep movsd ; moves a dword and updates ecx , e s i and edi
+;    ret
+;ENDP copyBackgroundToBuffer
 
-
-
-
-
+PROC copyBufferToVideoMemory
+    USES esi, edi, ecx
+    cld
+    mov esi, offset _screenBuffer ; points to a "db 64000 dup ( ? ) " array
+    mov edi, VMEMADR ; the video memory
+    mov ecx, 64000 / 4 ; 320 * 200 , but copy groups four b y t e s
+    rep movsd ; moves a dword and updates ecx , e s i and edi
+    ret
+ENDP copyBufferToVideoMemory
 
 PROC main
     sti                ; Enable interrupts.
@@ -360,13 +380,15 @@ PROC main
 
     EXTRN printUnsignedNumber:PROC
     EXTRN printNewline:PROC
+    EXTRN updateColourPalette:PROC
+    EXTRN setVideoMode:PROC
 
-    ; Set video mode 13h
+    ; Setup graphics
     mov AL, DEBUG
     cmp AL, 1
     je skip_video
-    mov AX, 13h
-    int 10h
+    call setVideoMode, 13h
+    call updateColourPalette, 4
 skip_video:
 
     ; Set start of video memory
@@ -383,7 +405,15 @@ skip_print_bitboards:
     mov AL, DEBUG
     cmp AL, 1
     je skip_draw_board
-    call drawEmptyBoard
+    ;call drawEmptyBoard 
+
+    
+    mov eax, 1
+    mov edi, offset _screenBuffer
+    mov [edi], al
+    call copyBufferToVideoMemory  
+
+
 skip_draw_board:
     
 
@@ -406,6 +436,9 @@ ENDP main
 ; DATA
 ; -------------------------------------------------------------------
 DATASEG
+_screenBuffer db 64000 dup(?) ; Video buffer
+background_buffer db 64000 dup(?) ; background buffer
+
 
 ; Bitboards for pawns (64 bits each)
 white_pawns_high DD 0 ; High 32 bits 
@@ -433,6 +466,9 @@ white_kings_low  DD 0 ; Low 32 bits
 black_kings_high DD 0 ; High 32 bits
 black_kings_low  DD 0 ; Low 32 bits
 colour_to_draw DD 0
+
+
+
 
 
     

@@ -17,6 +17,16 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 ; CODE
 ; -------------------------------------------------------------------
 CODESEG
+PUBLIC setVideoMode
+PROC setVideoMode
+	ARG 	@@VM:byte
+	USES 	eax
+
+	movzx ax,[@@VM]
+	int 10h
+
+	ret
+ENDP setVideoMode
 
 PUBLIC printUnsignedNumber
 PROC printUnsignedNumber
@@ -65,5 +75,36 @@ PROC printNewline
 
     ret
 ENDP printNewline
+
+PUBLIC updateColourPalette
+PROC updateColourPalette
+	ARG	 	@@Ncolours: word
+	USES 	eax, ecx, edx, esi
+
+	mov esi, offset palette	; pointer to source palette
+	movzx ecx, [@@Ncolours] ; amount of colors to read (movzx = zero extend)
+	
+	; multiply ecx by 3 (three color components per color)
+	; do it efficiently (2*ecx + ecx)
+	mov eax, ecx
+	sal eax, 1
+	add ecx, eax
+
+	mov dx, 03C8h 	; DAC write port
+	xor al, al		; index of first color to change (0)
+	out dx, al		; write to IO
+
+	inc dx
+	rep outsb		; update all colors
+
+	ret
+ENDP updateColourPalette
+
+
+DATASEG
+palette		db 0, 0, 0
+			db 63, 63, 63
+			db 42, 28, 14
+			db 63, 63, 63
 
 END
