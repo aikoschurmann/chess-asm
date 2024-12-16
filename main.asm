@@ -316,7 +316,7 @@ PROC drawEmptyBoard
     uses ecx, edx, edi, eax
     mov ecx, 0             ; Start with y = 0
     ;mov edi to start of video_buffer
-    mov edi, offset _screenBuffer
+    mov edi, offset _background_buffer
     sub edi, 0
 
 outer_loop:
@@ -365,6 +365,16 @@ PROC copyBufferToVideoMemory
     rep movsd ; moves a dword and updates ecx , e s i and edi
     ret
 ENDP copyBufferToVideoMemory
+
+PROC copyBackgroundToBuffer
+    USES esi, edi, ecx
+    cld
+    Lea esi, [offset _background_buffer] ; points to a "db 64000 dup ( ? ) " array
+    mov edi, offset _screenBuffer 
+    mov ecx, 64000 / 4 ; 320 * 200 , but copy groups four b y t e s
+    rep movsd ; moves a dword and updates ecx , e s i and edi
+    ret
+ENDP copyBackgroundToBuffer
 
 PROC copyBufferToVideoMemoryLoop
     ; Set up segment registers
@@ -569,6 +579,11 @@ PROC main
     call setupBitboards
 
     call drawEmptyBoard 
+    
+    ;since background never changes we can store it and copy it instead of redrawing
+    ;so first copy the background to the buffer
+    ;then draw the pieces and other stuff
+    call copyBackgroundToBuffer
     call drawPieces
     call copyBufferToVideoMemory
 
@@ -592,7 +607,7 @@ ENDP main
 ; -------------------------------------------------------------------
 DATASEG
 _screenBuffer db 64000 dup(?) ; Video buffer
-background_buffer db 64000 dup(?) ; background buffer
+_background_buffer db 64000 dup(?) ; background buffer
 
 
 ; Bitboards for pawns (64 bits each)
