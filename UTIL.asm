@@ -105,6 +105,7 @@ DATASEG
 palette		db 0, 0, 0
 			db 63, 63, 63
 			db 42, 28, 14
-			db 63, 63, 63
+			db 15, 15, 15
+			db 50, 50, 50
 
 END
