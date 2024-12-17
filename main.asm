@@ -346,15 +346,6 @@ end_outer_loop:
     ret                     ; Return from the function
 ENDP drawEmptyBoard
 
-;PROC copyBackgroundToBuffer
-;    USES esi, edi, ecx, eax
-;    cld
-;    mov esi , offset background_buffer ; points to a "db 64000 dup ( ? ) " array
-;    mov edi , VMEMADR ; the video memory
-;    mov ecx , 64000 / 4 ; 320 * 200 , but copy groups four b y t e s
-;    rep movsd ; moves a dword and updates ecx , e s i and edi
-;    ret
-;ENDP copyBackgroundToBuffer
 
 PROC copyBufferToVideoMemory
     USES esi, edi, ecx
@@ -548,23 +539,547 @@ PROC drawPieces
     ret
 ENDP drawPieces
 
+PROC combineWhiteBitBoards
+    mov eax, [white_pawns_low]
+    mov ebx, [white_knights_low]
+    or eax, ebx
+    mov [white_combine_low], eax
+
+    mov eax, [white_pawns_high]
+    mov ebx, [white_knights_high]
+    or eax, ebx
+    mov [white_combine_high], eax
+
+    mov eax, [white_combine_low]
+    mov ebx, [white_bishops_low]
+    or eax, ebx
+    mov [white_combine_low], eax
+
+    mov eax, [white_combine_high]
+    mov ebx, [white_bishops_high]
+    or eax, ebx
+    mov [white_combine_high], eax
+
+    mov eax, [white_combine_low]
+    mov ebx, [white_rooks_low]
+    or eax, ebx
+    mov [white_combine_low], eax
+
+    mov eax, [white_combine_high]
+    mov ebx, [white_rooks_high]
+    or eax, ebx
+    mov [white_combine_high], eax
+
+    mov eax, [white_combine_low]
+    mov ebx, [white_queens_low]
+    or eax, ebx
+    mov [white_combine_low], eax
+
+    mov eax, [white_combine_high]
+    mov ebx, [white_queens_high]
+    or eax, ebx
+    mov [white_combine_high], eax
+
+    mov eax, [white_combine_low]
+    mov ebx, [white_kings_low]
+    or eax, ebx
+    mov [white_combine_low], eax
+
+    mov eax, [white_combine_high]
+    mov ebx, [white_kings_high]
+    or eax, ebx
+    mov [white_combine_high], eax
+
+    ret
+ENDP combineWhiteBitBoards
+
+PROC combineBlackBitBoards
+    mov eax, [black_pawns_low]
+    mov ebx, [black_knights_low]
+    or eax, ebx
+    mov [black_combine_low], eax
+
+    mov eax, [black_pawns_high]
+    mov ebx, [black_knights_high]
+    or eax, ebx
+    mov [black_combine_high], eax
+
+    mov eax, [black_combine_low]
+    mov ebx, [black_bishops_low]
+    or eax, ebx
+    mov [black_combine_low], eax
+
+    mov eax, [black_combine_high]
+    mov ebx, [black_bishops_high]
+    or eax, ebx
+    mov [black_combine_high], eax
+
+    mov eax, [black_combine_low]
+    mov ebx, [black_rooks_low]
+    or eax, ebx
+    mov [black_combine_low], eax
+
+    mov eax, [black_combine_high]
+    mov ebx, [black_rooks_high]
+    or eax, ebx
+    mov [black_combine_high], eax
+
+    mov eax, [black_combine_low]
+    mov ebx, [black_queens_low]
+    or eax, ebx
+    mov [black_combine_low], eax
+
+    mov eax, [black_combine_high]
+    mov ebx, [black_queens_high]
+    or eax, ebx
+    mov [black_combine_high], eax
+
+    mov eax, [black_combine_low]
+    mov ebx, [black_kings_low]
+    or eax, ebx
+    mov [black_combine_low], eax
+
+    mov eax, [black_combine_high]
+    mov ebx, [black_kings_high]
+    or eax, ebx
+    mov [black_combine_high], eax
+
+    ret
+ENDP combineBlackBitBoards
+
+PROC generatePawnMovementBitBoar
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+
+    cmp @@position, 31              ; Check if position is in the low part (0-31)
+    jg @@high_mask                  ; If position is greater than 31, it's in the high part
+
+@@low_mask:
+    mov edx, 1                      ; Start with 1 (a single bit set)
+    mov ecx, @@position             ; Load the position (0-31) into ECX
+    shl edx, cl                     ; Shift 1 by the amount in position
+    mov eax, [@@bitBoardLow]        ; Load the low part of the bitboard
+    ;and eax, edx                    ; Mask the pawn position in the low part
+    jmp @@mask_done                 ; Skip high part processing
+
+@@high_mask:
+    sub ecx, 31                     ; Adjust the position to be within 0-31 for the high part
+    mov edx, 1                      ; Start with 1 (a single bit set)
+    shl edx, cl                     ; Shift 1 by the adjusted position (for high part)
+    mov eax, 0                      ; Clear eax (no pawn movement in low part)
+    mov ebx, [@@bitBoardHigh]       ; Load the high part of the bitboard
+    ;and ebx, edx                    ; Mask the pawn position in the high part
+
+@@mask_done:
+    ; --- Handle the blocking bitboard ---
+    not [@@blockingBitBoardLow]     ; Invert the blocking bitboard (low part)
+    not [@@blockingBitBoardHigh]    ; Invert the blocking bitboard (high part)
+
+    ; Mask the low and high parts of the bitboard against the blocking bitboard
+    and eax, [@@blockingBitBoardLow]   ; Mask the low part with the blocking bitboard
+    and ebx, [@@blockingBitBoardHigh]  ; Mask the high part with the blocking bitboard
+
+    ; --- Combine the results ---
+    shl eax, 8                      ; Shift eax left by 8 bits (to align with the high part)
+    rcl ebx, 8                      ; Rotate the carry flag into ebx
+
+    ; Store the results in the movement bitboards
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP generatePawnMovementBitBoar
+
+
+PROC isolateBitFromBitBoard
+    ARG @@bitBoard:dword, @@position:dword
+    USES eax, edx, ecx
+
+    mov edx, 1                      ; Start with 1 (a single bit set)
+    mov ecx, @@position             ; Load the position (0-31) into ECX
+    shl edx, cl                     ; Shift 1 by the amount in position
+    mov eax, [@@bitBoard]           ; Load the bitboard
+    and eax, edx                    ; Mask the pawn position in the bitboard
+
+    mov [isolated_bit_low], eax         ; Store the isolated bit
+    ret
+ENDP isolateBitFromBitBoard
+
+PROC isolateBitFromBitBoards
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@position:dword
+    USES eax
+
+    cmp @@position, 31              ; Check if position is in the low part (0-31)
+    jg @@isolate_high               ; If position is greater than 31, it's in the high part
+
+@@isolate_low:
+    call isolateBitFromBitBoard, @@bitBoardLow, @@position
+    mov [isolated_bit_high], 0     
+    ret
+
+@@isolate_high:
+    sub @@position, 32              ; Adjust the position to be within 0-31 for the high part
+    call isolateBitFromBitBoard, @@bitBoardHigh, @@position
+    mov eax, [isolated_bit_low]
+    mov [isolated_bit_low], 0
+    mov [isolated_bit_high], eax          
+    ret
+
+ENDP isolateBitFromBitBoards
+
+PROC generatePawnMovementBitBoard
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+    USES eax, ebx
+    mov eax, [@@bitBoardLow]
+    mov ebx, [@@bitBoardHigh]
+
+    ;only get the bit at 'position' from the bitboards it can be in the low or high part
+    call isolateBitFromBitBoards, @@bitBoardLow, @@bitBoardHigh, @@position
+    
+    ;res gets stored in isolated_bit_low and isolated_bit_high
+    mov eax, [isolated_bit_low]
+    mov ebx, [isolated_bit_high]
+
+    ;mask / remove last row since they can't move forward
+    mov ecx, TOPWALL
+    not ecx
+    and ebx, ecx
+
+    ;shift the bit to the left 8 times this has the effect of moving the bit to the next row
+    mov ecx, 8              ; Set loop counter to 8
+@@shift_rotate_loop:
+    shl eax, 1           
+    rcl ebx, 1              ; Rotate the carry flag into ebx (shift ebx left and put carry in LSB of ebx)
+    loop @@shift_rotate_loop
+    
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    ;if the pawn is in the second row it can move two steps forward
+    cmp @@position, 15
+    jg @@skipDoubleMove
+
+    ;and so we need to shift the bit to the left 8 times again
+    mov ecx, 8              ; Set loop counter to 8
+@@shift_rotate_loop2:
+    shl eax, 1           ; eax = eax << 1, carry flag set to the bit that was shifted out
+    rcl ebx, 1           ; Rotate the carry flag into ebx (shift ebx left and put carry in LSB of ebx)
+    loop @@shift_rotate_loop2
+
+    ;we combine the two movement bitboards 1 step and 2 steps
+    or eax, [@@movementBitBoardLow]
+@@skipDoubleMove:
+
+    ;mask the movement bitboard with the blocking bitboard
+    ;we remove the positions that are already occupied by other pieces
+    not [@@blockingBitBoardLow]     ; Invert the blocking bitboard (low part)
+    not [@@blockingBitBoardHigh]    ; Invert the blocking bitboard (high part)
+
+    ; Mask the low and high parts of the bitboard against the blocking bitboard
+    and eax, [@@blockingBitBoardLow]   ; Mask the low part with the blocking bitboard
+    and ebx, [@@blockingBitBoardHigh]  ; Mask the high part with the blocking bitboard
+
+    ;store the result in the movement bitboards
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP generatePawnMovementBitBoard
+
+PROC repeatShiftRotateLeft
+    ARG @@shift:dword, @@mask:dword, @@mask2:dword, @@iterations:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+    USES eax, ebx, ecx, edx
+
+    mov [@@movementBitBoardLow], 0   ; Initialize movement bitboard (low part) to 0
+    mov [@@movementBitBoardHigh], 0  ; Initialize movement bitboard (high part) to 0
+
+    mov eax, [isolated_bit_low]      ; Load the low part of the bitboard
+    mov ebx, [isolated_bit_high]     ; Load the high part of the bitboard
+
+    mov ecx, @@iterations                       ; Set outer loop counter to 8 (for 8 iterations)
+@@outer_loop:
+    push ecx                         ; Save the outer loop counter
+
+    mov edx, @@mask                  ; Load the mask
+    not edx                          ; Invert the mask
+    and eax, edx                     ; Apply mask to the low part (eax)
+    and ebx, edx                     ; Apply mask to the high part (ebx)
+
+    mov edx, @@mask2                  ; Load the mask
+    not edx                          ; Invert the mask
+    and ebx, edx                     ; Apply mask to the high part (ebx)
+
+    mov ecx, @@shift                 ; Set inner loop counter for shifts and rotates
+@@shift_rotate_loop_left_up:
+    shl eax, 1                       ; Shift eax left by 1 bit
+    rcl ebx, 1                       ; Rotate the carry flag into ebx
+    loop @@shift_rotate_loop_left_up ; Repeat the inner loop for the specified number of shifts
+
+    pop ecx                          ; Restore the outer loop counter
+
+    ; Combine the shifted results with the movement bitboard
+    or [@@movementBitBoardLow], eax  ; Update the movement bitboard (low part)
+    or [@@movementBitBoardHigh], ebx ; Update the movement bitboard (high part)
+
+    loop @@outer_loop                ; Repeat the outer loop for 8 iterations
+
+    ; Store the final result in the output variables
+    mov eax, [@@movementBitBoardLow]
+    mov ebx, [@@movementBitBoardHigh]
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP repeatShiftRotateLeft
+
+PROC repeatShiftRotateRight
+    ARG @@shift:dword, @@mask:dword, @@mask2:dword, @@iterations:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+    USES eax, ebx, ecx, edx
+
+    mov [@@movementBitBoardLow], 0   ; Initialize movement bitboard (low part) to 0
+    mov [@@movementBitBoardHigh], 0  ; Initialize movement bitboard (high part) to 0
+
+    mov eax, [isolated_bit_low]      ; Load the low part of the bitboard
+    mov ebx, [isolated_bit_high]     ; Load the high part of the bitboard
+
+    mov ecx, @@iterations                       ; Set outer loop counter to 8 (for 8 iterations)
+@@outer_loop:
+    push ecx                         ; Save the outer loop counter
+
+    mov edx, @@mask                  ; Load the mask
+    not edx                          ; Invert the mask
+    and eax, edx                     ; Apply mask to the low part (eax)
+    and ebx, edx                     ; Apply mask to the high part (ebx)
+
+    mov edx, @@mask2                  ; Load the mask
+    not edx                          ; Invert the mask
+    and eax, edx                     ; Apply mask to the low part (eax)
+
+    mov ecx, @@shift                 ; Set inner loop counter for shifts and rotates
+@@shift_rotate_loop_left_up:
+    shr eax, 1                       ; Shift eax left by 1 bit
+    rcr ebx, 1                       ; Rotate the carry flag into ebx
+    loop @@shift_rotate_loop_left_up ; Repeat the inner loop for the specified number of shifts
+
+    pop ecx                          ; Restore the outer loop counter
+
+    ; Combine the shifted results with the movement bitboard
+    or [@@movementBitBoardLow], eax  ; Update the movement bitboard (low part)
+    or [@@movementBitBoardHigh], ebx ; Update the movement bitboard (high part)
+
+    loop @@outer_loop                ; Repeat the outer loop for 8 iterations
+
+    ; Store the final result in the output variables
+    mov eax, [@@movementBitBoardLow]
+    mov ebx, [@@movementBitBoardHigh]
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP repeatShiftRotateRight
+
+
+
+
+PROC generateBishopMovementBitBoard
+ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+    USES eax, ebx
+
+    mov [@@movementBitBoardLow], 0
+    mov [@@movementBitBoardHigh], 0
+
+    ;only get the bit at 'position' from the bitboards it can be in the low or high part
+    call isolateBitFromBitBoards, [@@bitBoardLow], [@@bitBoardHigh], [@@position]
+    
+    ;res gets stored in isolated_bit_low and isolated_bit_high
+    mov eax, 0
+    mov ebx, 0
+
+    ;mask / remove left column since they can't move left
+    
+    call repeatShiftRotateLeft, 7, LEFTWALL, TOPWALL, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+
+    call repeatShiftRotateLeft, 9, RIGHTWALL, TOPWALL, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 7, LEFTWALL, BOTTOMWALL, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 9, RIGHTWALL, BOTTOMWALL, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+
+
+    ;mask the movement bitboard with the blocking bitboard
+    ;we remove the positions that are already occupied by other pieces
+    not [@@blockingBitBoardLow]     ; Invert the blocking bitboard (low part)
+    not [@@blockingBitBoardHigh]    ; Invert the blocking bitboard (high part)
+
+    ; Mask the low and high parts of the bitboard against the blocking bitboard
+    and eax, [@@blockingBitBoardLow]   ; Mask the low part with the blocking bitboard
+    and ebx, [@@blockingBitBoardHigh]  ; Mask the high part with the blocking bitboard
+
+    ;store the result in the movement bitboards
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP generateBishopMovementBitBoard
+
+PROC generateKnightMovementBitBoard
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+    USES eax, ebx
+
+    
+    ret
+ENDP generateKnightMovementBitBoard
+
+PROC generateRookMovementBitBoard
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword
+    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
+    USES eax, ebx
+
+    mov [@@movementBitBoardLow], 0
+    mov [@@movementBitBoardHigh], 0
+
+    ;only get the bit at 'position' from the bitboards it can be in the low or high part
+    call isolateBitFromBitBoards, [@@bitBoardLow], [@@bitBoardHigh], [@@position]
+    
+    ;res gets stored in isolated_bit_low and isolated_bit_high
+    mov eax, 0
+    mov ebx, 0
+
+    ;mask / remove left column since they can't move left
+    
+    call repeatShiftRotateLeft, 8, 0, TOPWALL, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+
+    call repeatShiftRotateLeft, 1, RIGHTWALL, 0, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 8, 0, BOTTOMWALL, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 1, LEFTWALL, 0, @@iterations
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+
+
+    ;mask the movement bitboard with the blocking bitboard
+    ;we remove the positions that are already occupied by other pieces
+    not [@@blockingBitBoardLow]     ; Invert the blocking bitboard (low part)
+    not [@@blockingBitBoardHigh]    ; Invert the blocking bitboard (high part)
+
+    ; Mask the low and high parts of the bitboard against the blocking bitboard
+    and eax, [@@blockingBitBoardLow]   ; Mask the low part with the blocking bitboard
+    and ebx, [@@blockingBitBoardHigh]  ; Mask the high part with the blocking bitboard
+
+    ;store the result in the movement bitboards
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP generateRookMovementBitBoard
+
+PROC generateQueenkMovementBitBoard
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword
+    USES eax, ebx
+
+    call generateBishopMovementBitBoard, [@@bitBoardLow], [@@bitBoardHigh], [@@blockingBitBoardLow], [@@blockingBitBoardHigh], [@@position], [@@iterations]
+    
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+
+    call generateRookMovementBitBoard, [@@bitBoardLow], [@@bitBoardHigh], [@@blockingBitBoardLow], [@@blockingBitBoardHigh], [@@position], [@@iterations]
+    or eax, [movement_bit_board_low]
+    or ebx, [movement_bit_board_high]
+
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP generateQueenkMovementBitBoard
+
+PROC generateKingMovementBitBoard
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword
+
+    call generateQueenkMovementBitBoard, [@@bitBoardLow], [@@bitBoardHigh], [@@blockingBitBoardLow], [@@blockingBitBoardHigh], [@@position], 1
+    ret
+ENDP generateKingMovementBitBoard
+
 
 
 PROC main
     sti                ; Enable interrupts.
     cld                ; Clear direction flag.
 
-    push ds
-    pop es
+    push ds            ;used for buffers DO NOT REMOVE!
+    pop es             ;used for buffers DO NOT REMOVE!
 
     VMEMADR EQU 0A0000h    ; Video memory address
     BUFFERADR EQU 0B0000h  ; Buffer address
     SCRWIDTH EQU 320       ; Screen width for mode 13h
     SCRHEIGHT EQU 200      ; Screen height
 
+
     PADDING EQU 60         ; black pixels left and right since 320x200 is not 1:1
     BOARDDIMENSION EQU 200 
     TILESIZE EQU 25 
+
+    TOPWALL EQU 0FF000000h
+    BOTTOMWALL EQU 0000000FFh
+    LEFTWALL EQU 001010101h
+    RIGHTWALL EQU 080808080h
     
     EXTRN printUnsignedNumber:PROC
     EXTRN printNewline:PROC
@@ -573,18 +1088,35 @@ PROC main
 
 
     call setVideoMode, 13h
-    call updateColourPalette, 5
+    call updateColourPalette, 6
     mov EDI, VMEMADR
 
     call setupBitboards
+    call combineWhiteBitBoards
+    call combineBlackBitBoards
+
+    ;TODO: combine the white and black bitboards into block_low and block_high
 
     call drawEmptyBoard 
-    
+
     ;since background never changes we can store it and copy it instead of redrawing
     ;so first copy the background to the buffer
     ;then draw the pieces and other stuff
     call copyBackgroundToBuffer
     call drawPieces
+    ;call drawBitBoard, [white_combine_low], offset _pawn_white, 0
+    ;call drawBitBoard, [white_combine_high], offset _pawn_black, 32
+    call copyBufferToVideoMemory
+
+    call generateQueenkMovementBitBoard, [test_low], [test_high], [white_combine_low], [black_combine_high], 28, 8
+    
+    ;call drawBitBoard, [test_low], offset _pawn_white, 0
+    ;call drawBitBoard, [test_high], offset _pawn_white, 32
+    call drawBitBoard, [block_low], offset _bishop_black, 0
+    call drawBitBoard, [block_high], offset _bishop_black, 32
+    call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
+    call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
+
     call copyBufferToVideoMemory
 
 
@@ -602,6 +1134,8 @@ wait_for_key:
 
 ENDP main
 
+
+
 ; -------------------------------------------------------------------
 ; DATA
 ; -------------------------------------------------------------------
@@ -611,31 +1145,48 @@ _background_buffer db 64000 dup(?) ; background buffer
 
 
 ; Bitboards for pawns (64 bits each)
-white_pawns_high DD 0 ; High 32 bits 
-white_pawns_low  DD 0 ; Low 32 bits
-black_pawns_high DD 0 ; High 32 bits
-black_pawns_low  DD 0 ; Low 32 bits
-white_knights_high DD 0 ; High 32 bits
-white_knights_low  DD 0 ; Low 32 bits
-black_knights_high DD 0 ; High 32 bits
-black_knights_low  DD 0 ; Low 32 bits
-white_bishops_high DD 0 ; High 32 bits
-white_bishops_low  DD 0 ; Low 32 bits
-black_bishops_high DD 0 ; High 32 bits
-black_bishops_low  DD 0 ; Low 32 bits
-white_rooks_high DD 0 ; High 32 bits
-white_rooks_low  DD 0 ; Low 32 bits
-black_rooks_high DD 0 ; High 32 bits
-black_rooks_low  DD 0 ; Low 32 bits
-white_queens_high DD 0 ; High 32 bits
-white_queens_low  DD 0 ; Low 32 bits
-black_queens_high DD 0 ; High 32 bits
-black_queens_low  DD 0 ; Low 32 bits
-white_kings_high DD 0 ; High 32 bits
-white_kings_low  DD 0 ; Low 32 bits
-black_kings_high DD 0 ; High 32 bits
-black_kings_low  DD 0 ; Low 32 bits
-colour_to_draw DD 0
+white_pawns_high    DD 0 ; High 32 bits 
+white_pawns_low     DD 0 ; Low 32 bits
+black_pawns_high    DD 0 ; High 32 bits
+black_pawns_low     DD 0 ; Low 32 bits
+white_knights_high  DD 0 ; High 32 bits
+white_knights_low   DD 0 ; Low 32 bits
+black_knights_high  DD 0 ; High 32 bits
+black_knights_low   DD 0 ; Low 32 bits
+white_bishops_high  DD 0 ; High 32 bits
+white_bishops_low   DD 0 ; Low 32 bits
+black_bishops_high  DD 0 ; High 32 bits
+black_bishops_low   DD 0 ; Low 32 bits
+white_rooks_high    DD 0 ; High 32 bits
+white_rooks_low     DD 0 ; Low 32 bits
+black_rooks_high    DD 0 ; High 32 bits
+black_rooks_low     DD 0 ; Low 32 bits
+white_queens_high   DD 0 ; High 32 bits
+white_queens_low    DD 0 ; Low 32 bits
+black_queens_high   DD 0 ; High 32 bits
+black_queens_low    DD 0 ; Low 32 bits
+white_kings_high    DD 0 ; High 32 bits
+white_kings_low     DD 0 ; Low 32 bits
+black_kings_high    DD 0 ; High 32 bits
+black_kings_low     DD 0 ; Low 32 bits
+
+white_combine_high    DD 0 ; High 32 bits
+white_combine_low     DD 0 ; Low 32 bits
+black_combine_high    DD 0 ; High 32 bits
+black_combine_low     DD 0 ; Low 32 bits
+
+test_low DD 0FFFFFFFFh  ; Define a 32-bit value with all bits set to 1
+test_high DD 0FFFFFFFFh ; Same for the high part
+
+block_low DD 0 ; Low 32 bits
+block_high DD 0 ; High 32 bits
+
+movement_bit_board_high DD 0 ; High 32 bits
+movement_bit_board_low  DD 0 ; Low 32 bits
+isolated_bit_low DD 0
+isolated_bit_high DD 0
+
+colour_to_draw      DD 0
 
 
 
@@ -794,7 +1345,6 @@ _rook_black   dw 23, 24
                       db 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0
                       db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
-
 _bishop_white   dw 21, 24
                 db 9, 9, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9
                 db 9, 9, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9
@@ -949,6 +1499,23 @@ _rook_white   dw 23, 24
                       db 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0
                       db 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0
                       db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+_indicator dw 3, 15
+           db 9, 9, 9
+           db 5, 5, 5
+           db 5, 5, 5
+           db 5, 5, 5
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
+           db 9, 9, 9
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
