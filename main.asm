@@ -539,6 +539,8 @@ PROC drawBitBoard
     ret
 ENDP drawBitBoard
 
+
+
 PROC drawPieces
     call drawBitBoard, [white_pawns_low], offset _pawn_white, 0
     call drawBitBoard, [white_pawns_high], offset _pawn_black, 32
@@ -736,7 +738,7 @@ PROC isolateBitFromBitBoard
     USES eax, edx, ecx
 
     mov edx, 1                      ; Start with 1 (a single bit set)
-    mov ecx, [@@position]             ; Load the position (0-31) into ECX
+    mov ecx, [@@position]           ; Load the position (0-31) into ECX
     shl edx, cl                     ; Shift 1 by the amount in position
     mov eax, [@@bitBoard]           ; Load the bitboard
     and eax, edx                    ; Mask the pawn position in the bitboard
@@ -745,24 +747,55 @@ PROC isolateBitFromBitBoard
     ret
 ENDP isolateBitFromBitBoard
 
-PROC isolateBitFromBitBoards
-    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@position:dword
+PROC positionToBitBoard
+    ARG @@position:dword
+    USES eax, edx, ecx
+
+    mov edx, 1                      ; Start with 1 (a single bit set)
+    mov ecx, [@@position]           ; Load the position (0-63) into ECX
+    shl edx, cl                     ; Shift 1 by the amount in position
+
+    mov [active_bit_board_mask_low], edx
+    ret
+ENDP positionToBitBoard
+
+
+PROC positionToBitBoards
+    ARG @@position:dword
     USES eax
 
     cmp [@@position], 31              ; Check if position is in the low part (0-31)
     jg @@isolate_high               ; If position is greater than 31, it's in the high part
 
 @@isolate_low:
-    call isolateBitFromBitBoard, [@@bitBoardLow], [@@position]
-    mov [isolated_bit_high], 0     
+    call positionToBitBoard, [@@position]
+    mov [active_bit_board_mask_high], 0     
     ret
 
 @@isolate_high:
     sub @@position, 32              ; Adjust the position to be within 0-31 for the high part
-    call isolateBitFromBitBoard, [@@bitBoardHigh], [@@position]
-    mov eax, [isolated_bit_low]
-    mov [isolated_bit_low], 0
-    mov [isolated_bit_high], eax          
+    call positionToBitBoard, [@@position]
+    mov eax, [active_bit_board_mask_low]
+    mov [active_bit_board_mask_low], 0
+    mov [active_bit_board_mask_high], eax          
+    ret
+ENDP positionToBitBoards
+
+
+PROC isolateBitFromBitBoards
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@position:dword
+    USES eax
+
+    call positionToBitBoards, [@@position]
+
+    mov eax, [active_bit_board_mask_low]
+    and eax, [@@bitBoardLow]
+    mov [isolated_bit_low], eax
+
+    mov eax, [active_bit_board_mask_high]
+    and eax, [@@bitBoardHigh]
+    mov [isolated_bit_high], eax
+
     ret
 
 ENDP isolateBitFromBitBoards
@@ -1360,43 +1393,326 @@ PROC mouse_uninstall
     ret
 ENDP mouse_uninstall
 
+PROC convertScreenPositionToBitBoardPosition
+    ARG @@xp:dword, @@yp:dword
+    USES eax, ebx, ecx, edx
+
+    ; convert y position to bitboard position
+    mov eax, [@@yp]
+    mov ebx, TILESIZE
+    xor edx, edx
+    div ebx
+    mov ebx, 7
+    sub ebx, eax
+    mov [board_click_y], ebx
+
+    ; chech if the click is on the board
+    mov eax, [@@xp]
+    cmp eax, PADDING
+    jl @@off_screen
+
+    mov ebx, PADDING
+    add ebx, BOARDDIMENSION
+    cmp eax, ebx
+    jge @@off_screen
+
+    sub eax, PADDING
+    xor edx, edx
+    mov ebx, TILESIZE
+    div ebx
+    mov [board_click_x], eax
+    ret
+
+@@off_screen:
+    mov [board_click_x], -1
+    mov [board_click_y], -1
+    ret
+ENDP convertScreenPositionToBitBoardPosition
+
+PROC locateWhitePiece
+    ARG @@pieceMaskLow:dword, @@pieceMaskHigh:dword
+
+    mov eax, [white_pawns_low]
+    mov ebx, [white_pawns_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@pawn_found
+    cmp ebx, 0
+    jz @@no_pawn
+
+@@pawn_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEPAWN
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_pawn:
+    mov eax, [white_knights_low]
+    mov ebx, [white_knights_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@knight_found
+    cmp ebx, 0
+    jz @@no_knight
+
+@@knight_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEKNIGHT
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_knight:
+    mov eax, [white_bishops_low]
+    mov ebx, [white_bishops_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@bishop_found
+    cmp ebx, 0
+    jz @@no_bishop
+
+@@bishop_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEBISHOP
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_bishop:
+    mov eax, [white_rooks_low]
+    mov ebx, [white_rooks_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@rook_found
+    cmp ebx, 0
+    jz @@no_rook
+
+@@rook_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEROOK
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_rook:
+    mov eax, [white_queens_low]
+    mov ebx, [white_queens_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@queen_found
+    cmp ebx, 0
+    jz @@no_queen
+
+@@queen_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEQUEEN
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_queen:
+    mov eax, [white_kings_low]
+    mov ebx, [white_kings_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@king_found
+    cmp ebx, 0
+    jz @@no_king
+
+@@king_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEKING
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_king:
+    mov [active_bit_board_low], 0
+    mov [active_bit_board_high], 0
+    mov eax, 0
+    mov [active_bit_board_type], eax
+    ret
+    
+ENDP locateWhitePiece
+
+PROC locateBlackPiece
+    ARG @@pieceMaskLow:dword, @@pieceMaskHigh:dword
+
+    mov eax, [black_pawns_low]
+    mov ebx, [black_pawns_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@pawn_found
+    cmp ebx, 0
+    jz @@no_pawn
+
+@@pawn_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEPAWN
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_pawn:
+    mov eax, [black_knights_low]
+    mov ebx, [black_knights_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@knight_found
+    cmp ebx, 0
+    jz @@no_knight
+
+@@knight_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEKNIGHT
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_knight:
+    mov eax, [black_bishops_low]
+    mov ebx, [black_bishops_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@bishop_found
+    cmp ebx, 0
+    jz @@no_bishop
+
+@@bishop_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEBISHOP
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_bishop:
+    mov eax, [black_rooks_low]
+    mov ebx, [black_rooks_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@rook_found
+    cmp ebx, 0
+    jz @@no_rook
+
+@@rook_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEROOK
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_rook:
+    mov eax, [black_queens_low]
+    mov ebx, [black_queens_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@queen_found
+    cmp ebx, 0
+    jz @@no_queen
+
+@@queen_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEQUEEN
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_queen:
+    mov eax, [black_kings_low]
+    mov ebx, [black_kings_high]
+    and eax, @@pieceMaskLow
+    and ebx, @@pieceMaskHigh
+    cmp eax, 0
+    jnz @@king_found
+    cmp ebx, 0
+    jz @@no_king
+
+@@king_found:
+    mov [active_bit_board_low], eax
+    mov [active_bit_board_high], ebx
+    mov eax, TYPEKING
+    mov [active_bit_board_type], eax
+    ret
+
+@@no_king:
+    mov [active_bit_board_low], 0
+    mov [active_bit_board_high], 0
+    mov eax, 0
+    mov [active_bit_board_type], eax
+    ret
+
+ENDP locateBlackPiece
+
+PROC renderWhiteMovementBitBoard
+    ARG @@position:dword
+    USES eax, ebx, ecx, edx
+    mov eax, [active_bit_board_type]
+    cmp eax, TYPEPAWN
+    jne @@not_pawn
+    call generateWhitePawnMovementBitBoard, [active_bit_board_low], [active_bit_board_low], [combine_low], [combine_high], [@@position], 1, [black_combine_low], [black_combine_high]
+    ret
+
+@@not_pawn:
+    cmp eax, TYPEKNIGHT
+    jne @@not_knight
+    call generateKnightMovementBitBoard, [active_bit_board_low], [active_bit_board_low], [combine_low], [combine_high], [@@position], 1, [black_combine_low], [black_combine_high]
+    ret
+
+@@not_knight:
+    cmp eax, TYPEBISHOP
+    jne @@not_bishop
+    call generateBishopMovementBitBoard, [active_bit_board_low], [active_bit_board_low], [combine_low], [combine_high], [@@position], 1, [black_combine_low], [black_combine_high]
+    ret
+
+@@not_bishop:
+    cmp eax, TYPEROOK
+    jne @@not_rook
+    call generateRookMovementBitBoard, [active_bit_board_low], [active_bit_board_low], [combine_low], [combine_high], [@@position], 1, [black_combine_low], [black_combine_high]
+    ret
+
+@@not_rook:
+    cmp eax, TYPEQUEEN
+    jne @@not_queen
+    call generateQueenMovementBitBoard, [active_bit_board_low], [active_bit_board_low], [combine_low], [combine_high], [@@position], 1, [black_combine_low], [black_combine_high]
+    ret
+
+@@not_queen:
+    cmp eax, TYPEKING
+    jne @@not_king
+    call generateKingMovementBitBoard, [active_bit_board_low], [active_bit_board_low], [combine_low], [combine_high], [@@position], 1, [black_combine_low], [black_combine_high]
+    ret
+
+@@not_king:
+    ret
+ENDP renderWhiteMovementBitBoard
 
 PROC mouseHandler
     USES eax, ebx, ecx, edx
-    LOCAL @@x:dword, @@y:dword, @@xp:dword, @@yp:dword
+    LOCAL @@x:dword, @@y:dword, @@xp:dword, @@yp:dword, @@buttonstates:dword, @@position:dword
 
-
-    and bl, 3			; check for two mouse buttons (2 low end bits)
-	jnz @@no_press		; only execute if a mousebutton is pressed
+    mov [@@buttonstates], ebx
 
     movzx eax, dx		; get mouse height
     mov [@@yp], eax     ; store y position
 
-    mov ebx, TILESIZE   ; get tile size
-    xor edx, edx
-    div ebx             ; divide by tile size result in eax
-    mov [@@y], eax      ; store x position
-
     sar cx, 1			; horizontal cursor position is doubled in input 
-    
     mov [@@xp], ecx     ; store x position
 
-    cmp cx, PADDING     ; check if cursor is in padding area
-    jl @@no_press         ; if cursor is in padding area, do nothing
-    
-    mov eax, PADDING
-    add eax, BOARDDIMENSION
-    cmp ecx, eax ; check if cursor is in padding area
-    jge @@no_press         ; if cursor is in padding area, do nothing
+    ; Stores board position in [board_click_x] and [board_click_y]
+    call convertScreenPositionToBitBoardPosition, [@@xp], [@@yp]
 
-    sub cx, PADDING     ; subtract padding from cursor position
-    movzx eax, cx		; get mouse horizontal position
-    xor edx, edx
-    div ebx             ; divide by tile size result in eax
-    mov [@@x], eax      ; store y position
-
-@@skip_x:
-@@no_press:
     call drawEmptyBoard 
     ;since background never changes we can store it and copy it instead of redrawing
     ;so first copy the background to the buffer
@@ -1404,19 +1720,40 @@ PROC mouseHandler
     call copyBackgroundToBuffer
     call drawPieces
 
-    ; mul [@@y] with 8 to get the position in the bitboard
-    mov eax, 7
-    sub eax, [@@y]
+
+    and [@@buttonstates], 3			; check for two mouse buttons (2 low end bits)
+	jz @@no_press		; only execute if a mousebutton is pressed
+
+
+
+@@press:
+
+    ; Handle of board click
+    cmp [board_click_x], -1
+    je @@no_press
+
+    ; convert x, y to bitboard position (0-63)
+    mov eax, [board_click_y]
     mov ebx, 8
     mul ebx
     ;add [@@x] to the result
-    add eax, [@@x]
+    add eax, [board_click_x]
+    mov [@@position], eax
 
-    call generateKnightMovementBitBoard, [test_low], [test_high], [black_combine_low], [black_combine_high], eax, 8, [combine_low], [combine_high]
+    ; Reset movement bitboards
+    mov [movement_bit_board_low], 0
+    mov [movement_bit_board_high], 0
+
+    ; Generate a bitboard masks for piece at position
+    call positionToBitBoards, [@@position]
+    ; Check if there is a white piece at the position using the bitboard masks
+    call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    ; If there was a piece at the position, render the movement bitboard
+    call renderWhiteMovementBitBoard, [@@position]
 
     call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
     call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
-
+@@no_press:
     call drawSpritePixel, offset _arrow, offset _screenBuffer, [@@xp], [@@yp]
 
     call copyBufferToVideoMemory
@@ -1450,14 +1787,19 @@ PROC main
     BOTTOMWALLDOUBLE EQU 0000000FFFFh
     LEFTWALLDOUBLE EQU 003030303h
     RIGHTWALLDOUBLE EQU 0C0C0C0C0h
+
+    TYPEPAWN EQU 1
+    TYPEKNIGHT EQU 2
+    TYPEBISHOP EQU 3
+    TYPEROOK EQU 4
+    TYPEQUEEN EQU 5
+    TYPEKING EQU 6
+
     
     EXTRN printUnsignedNumber:PROC
     EXTRN printNewline:PROC
     EXTRN updateColourPalette:PROC
     EXTRN setVideoMode:PROC
-
-
-
 
     call setupBitboards
     call combineWhiteBitBoards
@@ -1561,6 +1903,14 @@ isolated_bit_high DD 0
 colour_to_draw      DD 0
 
 custom_mouse_handler    dd ?
+
+board_click_x dd 0
+board_click_y dd 0
+active_bit_board_type dd 0
+active_bit_board_low dd 0
+active_bit_board_high dd 0
+active_bit_board_mask_low dd 0
+active_bit_board_mask_high dd 0
 
 _bishop_black   dw 21, 24
                 db 9, 9, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9

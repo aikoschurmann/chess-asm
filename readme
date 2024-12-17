@@ -109,6 +109,20 @@ movement_bitboard:
 
 etc etc for other pieces
 
-- [ ] implement game loop turns
+- [ ] Implement cursor selection
 
-- [ ] implement selection and movement of pieces in ui
+make variables
+- active_bit_board_low
+- active_bit_board_high
+- active_bit_board_mask
+
+convert x y click to x y pos on board (0 - 7) using div by TILESIZE and taking into account PADDING. also draw origin is left top while origin of board is left bottom so conversion is needed
+(this can be a function too) input x, y. saves result in a variable board_click_x and board_click_y for example
+
+convert that board_click_x and board_click_y to pos y * 8 + x
+
+convert pos to single bit bitboard. since only 32 bits substract if needed and work in either the low or high.
+
+use that as a mask for the existing bitboards if not 0 then there was a match. 
+
+place that match in the previous variables
