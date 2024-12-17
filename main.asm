@@ -954,11 +954,102 @@ ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@bl
 ENDP generateBishopMovementBitBoard
 
 PROC generateKnightMovementBitBoard
-    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword
     LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
     USES eax, ebx
 
+    mov [@@movementBitBoardLow], 0
+    mov [@@movementBitBoardHigh], 0
+
+    call isolateBitFromBitBoards, [@@bitBoardLow], [@@bitBoardHigh], [@@position]
     
+    call repeatShiftRotateLeft, 6, LEFTWALLDOUBLE, TOPWALL, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateLeft, 15, LEFTWALL, TOPWALLDOUBLE, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateLeft, 10, RIGHTWALLDOUBLE, TOPWALL, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateLeft, 17, RIGHTWALL, TOPWALLDOUBLE, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 6, RIGHTWALLDOUBLE, BOTTOMWALL, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 15, RIGHTWALL, BOTTOMWALLDOUBLE, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 10, LEFTWALLDOUBLE, BOTTOMWALL, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+    call repeatShiftRotateRight, 17, LEFTWALL, BOTTOMWALLDOUBLE, 1
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+    or eax, [@@movementBitBoardLow]
+    or ebx, [@@movementBitBoardHigh]
+    mov [@@movementBitBoardLow], eax
+    mov [@@movementBitBoardHigh], ebx
+
+
+        ;mask the movement bitboard with the blocking bitboard
+    ;we remove the positions that are already occupied by other pieces
+    not [@@blockingBitBoardLow]     ; Invert the blocking bitboard (low part)
+    not [@@blockingBitBoardHigh]    ; Invert the blocking bitboard (high part)
+
+    ; Mask the low and high parts of the bitboard against the blocking bitboard
+    and eax, [@@blockingBitBoardLow]   ; Mask the low part with the blocking bitboard
+    and ebx, [@@blockingBitBoardHigh]  ; Mask the high part with the blocking bitboard
+
+    ;store the result in the movement bitboards
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+
     ret
 ENDP generateKnightMovementBitBoard
 
@@ -979,7 +1070,7 @@ PROC generateRookMovementBitBoard
 
     ;mask / remove left column since they can't move left
     
-    call repeatShiftRotateLeft, 8, 0, TOPWALL, @@iterations
+    call repeatShiftRotateLeft, 8, 0, TOPWALL, [@@iterations]
 
     mov eax, [movement_bit_board_low]
     mov ebx, [movement_bit_board_high]
@@ -989,7 +1080,7 @@ PROC generateRookMovementBitBoard
     mov [@@movementBitBoardHigh], ebx
 
 
-    call repeatShiftRotateLeft, 1, RIGHTWALL, 0, @@iterations
+    call repeatShiftRotateLeft, 1, RIGHTWALL, 0, [@@iterations]
 
     mov eax, [movement_bit_board_low]
     mov ebx, [movement_bit_board_high]
@@ -998,7 +1089,7 @@ PROC generateRookMovementBitBoard
     mov [@@movementBitBoardLow], eax
     mov [@@movementBitBoardHigh], ebx
 
-    call repeatShiftRotateRight, 8, 0, BOTTOMWALL, @@iterations
+    call repeatShiftRotateRight, 8, 0, BOTTOMWALL, [@@iterations]
 
     mov eax, [movement_bit_board_low]
     mov ebx, [movement_bit_board_high]
@@ -1007,7 +1098,7 @@ PROC generateRookMovementBitBoard
     mov [@@movementBitBoardLow], eax
     mov [@@movementBitBoardHigh], ebx
 
-    call repeatShiftRotateRight, 1, LEFTWALL, 0, @@iterations
+    call repeatShiftRotateRight, 1, LEFTWALL, 0, [@@iterations]
 
     mov eax, [movement_bit_board_low]
     mov ebx, [movement_bit_board_high]
@@ -1058,7 +1149,6 @@ PROC generateKingMovementBitBoard
 ENDP generateKingMovementBitBoard
 
 
-
 PROC main
     sti                ; Enable interrupts.
     cld                ; Clear direction flag.
@@ -1080,6 +1170,11 @@ PROC main
     BOTTOMWALL EQU 0000000FFh
     LEFTWALL EQU 001010101h
     RIGHTWALL EQU 080808080h
+
+    TOPWALLDOUBLE EQU 0FFFF0000h
+    BOTTOMWALLDOUBLE EQU 0000000FFFFh
+    LEFTWALLDOUBLE EQU 003030303h
+    RIGHTWALLDOUBLE EQU 0C0C0C0C0h
     
     EXTRN printUnsignedNumber:PROC
     EXTRN printNewline:PROC
@@ -1103,12 +1198,12 @@ PROC main
     ;so first copy the background to the buffer
     ;then draw the pieces and other stuff
     call copyBackgroundToBuffer
-    call drawPieces
+    ;call drawPieces
     ;call drawBitBoard, [white_combine_low], offset _pawn_white, 0
     ;call drawBitBoard, [white_combine_high], offset _pawn_black, 32
     call copyBufferToVideoMemory
 
-    call generateQueenkMovementBitBoard, [test_low], [test_high], [white_combine_low], [black_combine_high], 28, 8
+    call generateKnightMovementBitBoard, [test_low], [test_high], [block_low], [block_high], 16
     
     ;call drawBitBoard, [test_low], offset _pawn_white, 0
     ;call drawBitBoard, [test_high], offset _pawn_white, 32
@@ -1116,6 +1211,9 @@ PROC main
     call drawBitBoard, [block_high], offset _bishop_black, 32
     call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
     call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
+    ;call generateKingMovementBitBoard, [test_low], [test_high], [block_low], [block_high], 28
+    ;call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
+    ;call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
 
     call copyBufferToVideoMemory
 
