@@ -1751,9 +1751,10 @@ PROC mouseHandler
     ; If there was a piece at the position, render the movement bitboard
     call renderWhiteMovementBitBoard, [@@position]
 
+
+@@no_press:
     call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
     call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
-@@no_press:
     call drawSpritePixel, offset _arrow, offset _screenBuffer, [@@xp], [@@yp]
 
     call copyBufferToVideoMemory
