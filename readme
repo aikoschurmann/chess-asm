@@ -72,14 +72,14 @@ where type is a number
 for example 0 = pawn, 1 = Knight etc etc
 we will also need the function to read images and alter palette from I think the dancer example. 
 
-- [ ] Make a function to **combine bitboards same colour** using bitwise and (for checking blocking pieces)
+- [X] Make a function to **combine bitboards same colour** using bitwise and (for checking blocking pieces)
 combineBlackBitboards()
 
 stores it in datasegment for example:
 blackCombineLow 
 blackCombineHigh 
 
-- [ ] Implement Moving functions
+- [X] Implement Moving functions
 position is the piece for which you want to compute the moves
 movement_bitboard = generate_moves(piece, position, blockers)
 
