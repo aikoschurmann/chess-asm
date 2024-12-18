@@ -1946,10 +1946,10 @@ PROC isPositionCheck
     jmp @@endLocatePieceH
     ;if black piece, check if the position is occupied by a white piece
 @@locateWhitePieceH:
-    mov [movement_bit_board_low], 0
-    mov [movement_bit_board_high], 0
+
     call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
     ; if the position is occupied by a black piece, generate the movement bitboard
+    call renderWhiteMovementBitBoard, [@@currentPosition]
     call copyBufferToVideoMemory
 @@endLocatePieceH:
 
