@@ -1946,9 +1946,14 @@ PROC isPositionCheck
     jmp @@endLocatePieceH
     ;if black piece, check if the position is occupied by a white piece
 @@locateWhitePieceH:
+    mov [movement_bit_board_low], 0
+    mov [movement_bit_board_high], 0
     call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
     ; if the position is occupied by a black piece, generate the movement bitboard
     call renderWhiteMovementBitBoard, [@@currentPosition]
+    call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
+    call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
+    call copyBufferToVideoMemory
 @@endLocatePieceH:
 
     ; check if it intersects with the king's position
@@ -2108,7 +2113,6 @@ PROC MoveBlack
     
     ; remove potential captured piece
     call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
-    
     mov eax, [active_bit_board_low]
     mov [@@activeBitBoardPointerWhiteLow], eax
     mov eax, [eax]
@@ -2128,6 +2132,7 @@ PROC MoveBlack
     push [black_combine_low]
     push [black_combine_high]
 
+    call combineBitBoards
     call isPositionCheck, [black_kings_low], [black_kings_high], [black_combine_low], [black_combine_high], [white_combine_low], [white_combine_high], BLACK
 
     cmp [is_check], 1
@@ -2177,7 +2182,6 @@ PROC MoveBlack
     mov [eax], ebx
 
 @@end_undo:
-
 
     ; Reset movement bitboards
     mov [movement_bit_board_low], 0
