@@ -1950,9 +1950,6 @@ PROC isPositionCheck
     mov [movement_bit_board_high], 0
     call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
     ; if the position is occupied by a black piece, generate the movement bitboard
-    call renderWhiteMovementBitBoard, [@@currentPosition]
-    call drawBitBoard, [movement_bit_board_low], offset _indicator, 0
-    call drawBitBoard, [movement_bit_board_high], offset _indicator, 32
     call copyBufferToVideoMemory
 @@endLocatePieceH:
 
