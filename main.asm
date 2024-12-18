@@ -689,48 +689,7 @@ PROC combineBlackBitBoards
     ret
 ENDP combineBlackBitBoards
 
-PROC generatePawnMovementBitBoar
-    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword
-    LOCAL @@movementBitBoardLow:dword, @@movementBitBoardHigh:dword
 
-    cmp [@@position], 31              ; Check if position is in the low part (0-31)
-    jg @@high_mask                  ; If position is greater than 31, it's in the high part
-
-@@low_mask:
-    mov edx, 1                      ; Start with 1 (a single bit set)
-    mov ecx, [@@position]             ; Load the position (0-31) into ECX
-    shl edx, cl                     ; Shift 1 by the amount in position
-    mov eax, [@@bitBoardLow]        ; Load the low part of the bitboard
-    ;and eax, edx                    ; Mask the pawn position in the low part
-    jmp @@mask_done                 ; Skip high part processing
-
-@@high_mask:
-    sub ecx, 31                     ; Adjust the position to be within 0-31 for the high part
-    mov edx, 1                      ; Start with 1 (a single bit set)
-    shl edx, cl                     ; Shift 1 by the adjusted position (for high part)
-    mov eax, 0                      ; Clear eax (no pawn movement in low part)
-    mov ebx, [@@bitBoardHigh]       ; Load the high part of the bitboard
-    ;and ebx, edx                    ; Mask the pawn position in the high part
-
-@@mask_done:
-    ; --- Handle the blocking bitboard ---
-    not [@@blockingBitBoardLow]     ; Invert the blocking bitboard (low part)
-    not [@@blockingBitBoardHigh]    ; Invert the blocking bitboard (high part)
-
-    ; Mask the low and high parts of the bitboard against the blocking bitboard
-    and eax, [@@blockingBitBoardLow]   ; Mask the low part with the blocking bitboard
-    and ebx, [@@blockingBitBoardHigh]  ; Mask the high part with the blocking bitboard
-
-    ; --- Combine the results ---
-    shl eax, 8                      ; Shift eax left by 8 bits (to align with the high part)
-    rcl ebx, 8                      ; Rotate the carry flag into ebx
-
-    ; Store the results in the movement bitboards
-    mov [movement_bit_board_low], eax
-    mov [movement_bit_board_high], ebx
-
-    ret
-ENDP generatePawnMovementBitBoar
 
 
 PROC isolateBitFromBitBoard
@@ -756,6 +715,7 @@ PROC positionToBitBoard
     shl edx, cl                     ; Shift 1 by the amount in position
 
     mov [active_bit_board_mask_low], edx
+    mov [active_bit_board_mask_high], 0
     ret
 ENDP positionToBitBoard
 
@@ -1043,8 +1003,8 @@ PROC generateBlackPawnMovementBitBoard
     mov [movement_bit_board_high], 0
 
     ;calculate diagonal captures
-    call repeatShiftRotateRight, 7, LEFTWALL, BOTTOMWALL, 1, [@@enemyBitBoardLow], [@@enemyBitBoardHigh]
-    call repeatShiftRotateRight, 9, RIGHTWALL, BOTTOMWALL, 1, [@@enemyBitBoardLow], [@@enemyBitBoardHigh]
+    call repeatShiftRotateRight, 7, RIGHTWALL, BOTTOMWALL, 1, [@@enemyBitBoardLow], [@@enemyBitBoardHigh]
+    call repeatShiftRotateRight, 9, LEFTWALL, BOTTOMWALL, 1, [@@enemyBitBoardLow], [@@enemyBitBoardHigh]
 
     mov eax, [movement_bit_board_low]
     mov ebx, [movement_bit_board_high]
@@ -1213,6 +1173,25 @@ PROC generateQueenMovementBitBoard
 
     ret
 ENDP generateQueenMovementBitBoard
+
+PROC generateAllMovementBitBoard
+    ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword, @@enemyBitBoardLow:dword, @@enemyBitBoardHigh:dword
+    USES eax, ebx
+
+    call generateQueenMovementBitBoard, [@@bitBoardLow], [@@bitBoardHigh], [@@blockingBitBoardLow], [@@blockingBitBoardHigh], [@@position], 8, [@@enemyBitBoardLow], [@@enemyBitBoardHigh]
+
+    mov eax, [movement_bit_board_low]
+    mov ebx, [movement_bit_board_high]
+
+    call generateKnightMovementBitBoard, [@@bitBoardLow], [@@bitBoardHigh], [@@blockingBitBoardLow], [@@blockingBitBoardHigh], [@@position], 1, [@@enemyBitBoardLow], [@@enemyBitBoardHigh]
+    or eax, [movement_bit_board_low]
+    or ebx, [movement_bit_board_high]
+
+    mov [movement_bit_board_low], eax
+    mov [movement_bit_board_high], ebx
+
+    ret
+ENDP generateAllMovementBitBoard
 
 PROC generateKingMovementBitBoard
     ARG @@bitBoardLow:dword, @@bitBoardHigh:dword, @@blockingBitBoardLow:dword, @@blockingBitBoardHigh:dword, @@position:dword, @@iterations:dword, @@enemyBitBoardLow:dword, @@enemyBitBoardHigh:dword
@@ -1799,6 +1778,8 @@ PROC renderblackMovementBitBoard
     ret
 
 @@not_king:
+    mov [movement_bit_board_low], 0
+    mov [movement_bit_board_high], 0
     ret
     
 ENDP renderblackMovementBitBoard
@@ -1874,8 +1855,149 @@ PROC combineBitBoards
     ret
 ENDP combineBitBoards
 
+; 0 - white
+; 1 - black
+PROC isPositionCheck
+    ARG @@kingBitBoardLow:dword, @@kingBitBoardHigh:dword, @@whiteBitBoardLow:dword, @@whiteBitBoardHigh:dword, @@blackBitBoardLow:dword, @@blackBitBoardHigh:dword, @@colour:dword
+    USES eax, ebx, ecx, edx
+    LOCAL @@positionsToProcessLow:dword, @@positionsToProcessHigh:dword, @@currentPosition:dword, @@combinedBitBoardLow:dword, @@combinedBitBoardHigh:dword
+    
+    mov eax, [@@whiteBitBoardLow]
+    mov ebx, [@@whiteBitBoardHigh]
+    or eax, [@@blackBitBoardLow]
+    or ebx, [@@blackBitBoardHigh]
+    mov [@@combinedBitBoardLow], eax
+    mov [@@combinedBitBoardHigh], ebx
+
+    call bitBoardToPosition, [@@kingBitBoardLow], [@@kingBitBoardHigh]
+    
+    cmp [@@colour], 1
+    call generateAllMovementBitBoard, [@@kingBitBoardLow], [@@kingBitBoardHigh], [@@whiteBitBoardLow], [@@whiteBitBoardHigh], [position], 1, [@@combinedBitBoardLow], [@@combinedBitBoardHigh]
+
+    mov eax, [movement_bit_board_low]
+    mov [@@positionsToProcessLow], eax
+    mov eax, [movement_bit_board_high]
+    mov [@@positionsToProcessHigh], eax
+
+@@loop_low: 
+    ; get rightmost bit
+    bsf ecx, [@@positionsToProcessLow]
+    jz @@loop_high
+    mov [@@currentPosition], ecx
+  
+    ; convert position to bitboard
+    ; stores in movement_bit_board_low and movement_bit_board_high
+    call positionToBitBoards, [@@currentPosition]
+
+    ; check if the position is occupied by a piece
+    cmp [@@colour], 1
+    je @@locateWhitePieceL
+    ;if white piece, check if the position is occupied by a black piece
+@@locateBlackPieceL:
+    call locateBlackPiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    ; if the position is occupied by a black piece, generate the movement bitboard
+    call renderblackMovementBitBoard, [@@currentPosition]
+    jmp @@endLocatePieceL
+    ;if black piece, check if the position is occupied by a white piece
+@@locateWhitePieceL:
+    call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    ; if the position is occupied by a black piece, generate the movement bitboard
+    call renderWhiteMovementBitBoard, [@@currentPosition]
+@@endLocatePieceL:
+
+    ; check if it intersects with the king's position
+    mov eax, [movement_bit_board_low]
+    and eax, [@@kingBitBoardLow]
+    test eax, eax
+    jnz @@check
+
+    mov eax, [movement_bit_board_high]
+    and eax, [@@kingBitBoardHigh]
+    test eax, eax
+    jnz @@check
+
+    ; remove the position from the positions to process
+    mov eax, [@@positionsToProcessLow]
+    mov ebx, [active_bit_board_mask_low]
+    not ebx
+    and eax, ebx
+    mov [@@positionsToProcessLow], eax
+    jmp @@loop_low
+
+@@loop_high: 
+    ; get rightmost bit
+    bsf ecx, [@@positionsToProcessHigh]
+    jz @@no_check
+    add ecx, 32
+    mov [@@currentPosition], ecx
+
+    ; convert position to bitboard
+    ; stores in movement_bit_board_low and movement_bit_board_high
+    call positionToBitBoards, [@@currentPosition]
+
+    ; check if the position is occupied by a piece
+    cmp [@@colour], 1
+    je @@locateWhitePieceH
+    ;if white piece, check if the position is occupied by a black piece
+@@locateBlackPieceH:
+    call locateBlackPiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    ; if the position is occupied by a black piece, generate the movement bitboard
+    call renderblackMovementBitBoard, [@@currentPosition]
+    jmp @@endLocatePieceH
+    ;if black piece, check if the position is occupied by a white piece
+@@locateWhitePieceH:
+    call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    ; if the position is occupied by a black piece, generate the movement bitboard
+    call renderWhiteMovementBitBoard, [@@currentPosition]
+@@endLocatePieceH:
+
+    ; check if it intersects with the king's position
+    mov eax, [movement_bit_board_low]
+    and eax, [@@kingBitBoardLow]
+    test eax, eax
+    jnz @@check
+
+    mov eax, [movement_bit_board_high]
+    and eax, [@@kingBitBoardHigh]
+    test eax, eax
+    jnz @@check
+
+    ; remove the position from the positions to process
+    mov eax, [@@positionsToProcessHigh]
+    mov ebx, [active_bit_board_mask_high]
+    not ebx
+    and eax, ebx
+    mov [@@positionsToProcessHigh], eax
+    jmp @@loop_high
+
+@@check:
+    mov [is_check], 1
+    ret
+
+@@no_check:
+    mov [is_check], 0
+    mov [movement_bit_board_low], 0
+    mov [movement_bit_board_high], 0
+    ;call drawBitBoard, 1, offset _indicator, 0
+
+    ret
+
+ENDP isPositionCheck
+
 PROC MoveWhite
     ARG @@lastmask_low:dword, @@lastmask_high:dword
+    LOCAL @@activeBitBoardPointerWhiteLow:dword, @@activeBitBoardPointerWhiteHigh:dword, @@activeBitBoardPointerBlackLow:dword, @@activeBitBoardPointerBlackHigh:dword, @@activeBitBoardWhiteLow:dword, @@activeBitBoardWhiteHigh:dword, @@activeBitBoardBlackLow:dword, @@activeBitBoardBlackHigh:dword
+    
+    mov eax, [active_bit_board_low]
+    mov [@@activeBitBoardPointerWhiteLow], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardWhiteLow], eax
+
+    mov eax, [active_bit_board_high]
+    mov [@@activeBitBoardPointerWhiteHigh], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardWhiteHigh], eax
+
     ; remove the piece from the old position
     call removePieceFromActiveBitboard, [@@lastmask_low], [@@lastmask_high]
 
@@ -1884,22 +2006,100 @@ PROC MoveWhite
     
     ; remove potential captured piece
     call locateBlackPiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    mov eax, [active_bit_board_low]
+    mov [@@activeBitBoardPointerBlackLow], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardBlackLow], eax
+
+    mov eax, [active_bit_board_high]
+    mov [@@activeBitBoardPointerBlackHigh], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardBlackHigh], eax
+
     call removePieceFromActiveBitboard, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    
+    push [combine_low]
+    push [combine_high]
+    push [white_combine_low]
+    push [white_combine_high]
+    push [black_combine_low]
+    push [black_combine_high]
+
+    call combineBitBoards
+    call isPositionCheck, [white_kings_low], [white_kings_high], [white_combine_low], [white_combine_high], [black_combine_low], [black_combine_high], WHITE
+
+    cmp [is_check], 1
+    je @@undo_move
+
+    pop eax
+    pop eax
+    pop eax
+    pop eax
+    pop eax
+    pop eax
+
+    ; change turn
+    mov [white_turn], 0
+    jmp @@end_undo
+
+@@undo_move:
+    ; undo move
+    pop eax
+    mov [black_combine_high], eax
+    pop eax
+    mov [black_combine_low], eax
+    pop eax
+    mov [white_combine_high], eax
+    pop eax
+    mov [white_combine_low], eax
+    pop eax
+    mov [combine_high], eax
+    pop eax
+    mov [combine_low], eax
+
+
+    mov eax, [@@activeBitBoardPointerWhiteLow]
+    mov ebx, [@@activeBitBoardWhiteLow]
+    mov [eax], ebx
+
+    mov eax, [@@activeBitBoardPointerWhiteHigh]
+    mov ebx, [@@activeBitBoardWhiteHigh]
+    mov [eax], ebx
+
+    mov eax, [@@activeBitBoardPointerBlackLow]
+    mov ebx, [@@activeBitBoardBlackLow]
+    mov [eax], ebx
+
+    mov eax, [@@activeBitBoardPointerBlackHigh]
+    mov ebx, [@@activeBitBoardBlackHigh]
+    mov [eax], ebx
+
+@@end_undo:
+
 
     ; Reset movement bitboards
     mov [movement_bit_board_low], 0
     mov [movement_bit_board_high], 0
-
-    ; update combine bitboards
+    
     call combineBitBoards
 
-    ; change turn
-    mov [white_turn], 0
     ret
 ENDP MoveWhite
 
 PROC MoveBlack
     ARG @@lastmask_low:dword, @@lastmask_high:dword
+    LOCAL @@activeBitBoardPointerWhiteLow:dword, @@activeBitBoardPointerWhiteHigh:dword, @@activeBitBoardPointerBlackLow:dword, @@activeBitBoardPointerBlackHigh:dword, @@activeBitBoardWhiteLow:dword, @@activeBitBoardWhiteHigh:dword, @@activeBitBoardBlackLow:dword, @@activeBitBoardBlackHigh:dword
+
+    mov eax, [active_bit_board_low]
+    mov [@@activeBitBoardPointerBlackLow], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardBlackLow], eax
+
+    mov eax, [active_bit_board_high]
+    mov [@@activeBitBoardPointerBlackHigh], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardBlackHigh], eax
+
     ; remove the piece from the old position
     call removePieceFromActiveBitboard, [@@lastmask_low], [@@lastmask_high]
 
@@ -1908,17 +2108,83 @@ PROC MoveBlack
     
     ; remove potential captured piece
     call locateWhitePiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
+    
+    mov eax, [active_bit_board_low]
+    mov [@@activeBitBoardPointerWhiteLow], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardWhiteLow], eax
+
+    mov eax, [active_bit_board_high]
+    mov [@@activeBitBoardPointerWhiteHigh], eax
+    mov eax, [eax]
+    mov [@@activeBitBoardWhiteHigh], eax
+
     call removePieceFromActiveBitboard, [active_bit_board_mask_low], [active_bit_board_mask_high]
+
+    push [combine_low]
+    push [combine_high]
+    push [white_combine_low]
+    push [white_combine_high]
+    push [black_combine_low]
+    push [black_combine_high]
+
+    call isPositionCheck, [black_kings_low], [black_kings_high], [black_combine_low], [black_combine_high], [white_combine_low], [white_combine_high], BLACK
+
+    cmp [is_check], 1
+    je @@undo_move
+
+    pop eax
+    pop eax
+    pop eax
+    pop eax
+    pop eax
+    pop eax
+
+    ; change turn
+    mov [white_turn], 1
+    jmp @@end_undo
+
+@@undo_move:
+    ; undo move
+    pop eax
+    mov [black_combine_high], eax
+    pop eax
+    mov [black_combine_low], eax
+    pop eax
+    mov [white_combine_high], eax
+    pop eax
+    mov [white_combine_low], eax
+    pop eax
+    mov [combine_high], eax
+    pop eax
+    mov [combine_low], eax
+
+
+    mov eax, [@@activeBitBoardPointerWhiteLow]
+    mov ebx, [@@activeBitBoardWhiteLow]
+    mov [eax], ebx
+
+    mov eax, [@@activeBitBoardPointerWhiteHigh]
+    mov ebx, [@@activeBitBoardWhiteHigh]
+    mov [eax], ebx
+
+    mov eax, [@@activeBitBoardPointerBlackLow]
+    mov ebx, [@@activeBitBoardBlackLow]
+    mov [eax], ebx
+
+    mov eax, [@@activeBitBoardPointerBlackHigh]
+    mov ebx, [@@activeBitBoardBlackHigh]
+    mov [eax], ebx
+
+@@end_undo:
+
 
     ; Reset movement bitboards
     mov [movement_bit_board_low], 0
     mov [movement_bit_board_high], 0
 
-    ; update combine bitboards
     call combineBitBoards
 
-    ; change turn
-    mov [white_turn], 1
     ret
 ENDP MoveBlack
 
@@ -2027,7 +2293,7 @@ PROC mouseHandler
     call positionToBitBoards, [@@position]
     ; Check if there is a white piece at the position using the bitboard masks
     call locateBlackPiece, [active_bit_board_mask_low], [active_bit_board_mask_high]
-    ; If there was a piece at the position, render the movement bitboard
+    ; If there was a piece at the position, generate the movement bitboard
     call renderblackMovementBitBoard, [@@position]
 
 @@draw:
@@ -2073,6 +2339,9 @@ PROC main
     TYPEROOK EQU 4
     TYPEQUEEN EQU 5
     TYPEKING EQU 6
+
+    WHITE EQU 0
+    BLACK EQU 1
 
     
     EXTRN printUnsignedNumber:PROC
@@ -2184,6 +2453,8 @@ active_bit_board_mask_low dd 0
 active_bit_board_mask_high dd 0
 valid_move dd 0
 white_turn dd 1
+is_check dd 0
+
 _bishop_black   dw 21, 24
                 db 9, 9, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9
                 db 9, 9, 9, 9, 9, 9, 9, 9, 0, 0, 0, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9
